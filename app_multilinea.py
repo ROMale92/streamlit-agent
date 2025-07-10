@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 import io
 
 st.set_page_config(layout="wide")
@@ -54,84 +55,27 @@ if file:
         for i in range(1, max_line):
             step = df[df["Linea"].isin([str(i), str(i + 1)])]
             step_pivot = step.pivot_table(index=id_col, columns="Linea", values="Terapia", aggfunc="first").dropna()
-            step_df = step_pivot.groupby([str(i), str(i + 1)]).size().reset_index(name="Count")
-            sankey_data.append(step_df)
+            if not step_pivot.empty:
+                step_df = step_pivot.groupby([str(i), str(i + 1)]).size().reset_index(name="Count")
+                sankey_data.append(step_df)
 
         last_step = df.groupby(id_col).agg({"Linea": "max", "Terapia": "last", "Esito": "last"}).reset_index()
         last_df = last_step.groupby(["Terapia", "Esito"]).size().reset_index(name="Count")
         sankey_data.append(last_df.rename(columns={"Terapia": str(max_line + 1), "Esito": str(max_line + 2)}))
 
-        sankey_df = pd.concat(sankey_data)
-        all_labels = pd.concat([sankey_df.iloc[:, 0], sankey_df.iloc[:, 1]]).unique().tolist()
-        sankey_df["source"] = sankey_df[sankey_df.columns[0]].apply(lambda x: all_labels.index(x))
-        sankey_df["target"] = sankey_df[sankey_df.columns[1]].apply(lambda x: all_labels.index(x))
+        if sankey_data:
+            sankey_df = pd.concat(sankey_data)
+            all_labels = pd.concat([sankey_df.iloc[:, 0], sankey_df.iloc[:, 1]]).unique().tolist()
+            sankey_df["source"] = sankey_df[sankey_df.columns[0]].apply(lambda x: all_labels.index(x))
+            sankey_df["target"] = sankey_df[sankey_df.columns[1]].apply(lambda x: all_labels.index(x))
 
-        fig = go.Figure(go.Sankey(
-            node=dict(label=all_labels, pad=15, thickness=20),
-            link=dict(source=sankey_df["source"], target=sankey_df["target"], value=sankey_df["Count"])
-        ))
-        st.plotly_chart(fig, use_container_width=True)
+            fig = go.Figure(go.Sankey(
+                node=dict(label=all_labels, pad=15, thickness=20),
+                link=dict(source=sankey_df["source"], target=sankey_df["target"], value=sankey_df["Count"])
+            ))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Non ci sono abbastanza transizioni terapeutiche per generare un Sankey.")
 
         # Selezione linee da analizzare
-        st.subheader("Analisi dettagliata per linea")
-        linee_dispo = sorted(df["Linea"].unique())
-        linee_sel = st.multiselect("Seleziona le linee da analizzare", linee_dispo, default=["1"])
-        df_linee = df[df["Linea"].isin(linee_sel)]
-
-        # Tabella 1
-        st.subheader("Tabella 1 - Caratteristiche pazienti")
-        if "Sesso" in df.columns and "Età" in df.columns:
-            tab1 = df_linee.groupby(cat_col).agg(
-                Numero_pazienti=(id_col, "nunique"),
-                Percentuale_maschi=("Sesso", lambda x: round((x == 'M').mean()*100, 2)),
-                Età_mediana=("Età", "median"),
-                Età_minima=("Età", "min"),
-                Età_massima=("Età", "max")
-            ).reset_index()
-            totale = tab1["Numero_pazienti"].sum()
-            tab1["Percentuale_pazienti"] = round(tab1["Numero_pazienti"] / totale * 100, 2)
-            st.dataframe(tab1)
-        else:
-            st.warning("Aggiungi le colonne 'Sesso' e 'Età' per visualizzare la Tabella 1.")
-
-        # Persistenza
-        persist = df_linee.groupby([id_col]).agg(
-            Prima_disp=(date_col, "min"),
-            Ultima_disp=(date_col, "max")
-        ).reset_index()
-        persist["Durata_trattamento"] = (persist["Ultima_disp"] - persist["Prima_disp"]).dt.days
-
-        # Aderenza (PDC)
-        pdc = df_linee.copy()
-        pdc["Mese"] = pdc[date_col].dt.to_period("M")
-        pdc_stats = (
-            pdc.groupby(id_col)["Mese"]
-            .nunique()
-            .reset_index(name="Mesi_coperti")
-        )
-        pdc_stats = pdc_stats.merge(persist, on=id_col)
-        pdc_stats["Durata_mesi"] = pdc_stats["Durata_trattamento"].apply(lambda x: max(1, x // 30 + 1))
-        pdc_stats["PDC"] = pdc_stats["Mesi_coperti"] / pdc_stats["Durata_mesi"]
-        pdc_stats["Aderente_>=0.8"] = pdc_stats["PDC"] >= 0.8
-
-        pdc_merged = pdc_stats.merge(df_linee[[id_col, cat_col]].drop_duplicates(), on=id_col)
-        tab_adh = pdc_merged.groupby(cat_col).agg(
-            mean=("PDC", "mean"),
-            sd=("PDC", "std"),
-            N_totali=(id_col, "count"),
-            N_aderenti=("Aderente_>=0.8", "sum")
-        ).reset_index()
-        tab_adh["%_aderenti"] = round(tab_adh["N_aderenti"] / tab_adh["N_totali"] * 100, 2)
-        st.subheader("Aderenza PDC")
-        st.dataframe(tab_adh)
-
-        # Esporta tutto in Excel
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Tutti i dati")
-            df_linee.to_excel(writer, index=False, sheet_name="Linee selezionate")
-            persist.to_excel(writer, index=False, sheet_name="Persistenza")
-            if 'tab1' in locals():
-                tab1.to_excel(writer, index=False, sheet_name="Tabella1")
-            tab_adh.to_excel(writer, index=False, sheet_name="Aderenza")
-        st.download_button("Scarica risultati in Excel", excel_buffer.getvalue(), file_name="risultati_analisi.xlsx")
+        st.subheader("Analisi dettaglia
