@@ -36,7 +36,10 @@ with st.expander("Seleziona colonne per Tabella 1"):
     with col2:
         age_col = st.selectbox("Colonna per l'età", options=df.columns, index=1)
 
+# Tabella 1 - Caratteristiche pazienti
 if sex_col in df.columns and age_col in df.columns:
+    st.markdown("### Tabella 1 - Caratteristiche pazienti")
+
     table1 = df.groupby("Terapia").agg(
         Numero_pazienti=(id_col, "nunique"),
         Percentuale_maschi=(sex_col, lambda x: round((x == "M").mean() * 100, 2)),
@@ -44,6 +47,11 @@ if sex_col in df.columns and age_col in df.columns:
         Età_minima=(age_col, "min"),
         Età_massima=(age_col, "max")
     ).reset_index()
+
+    st.dataframe(table1)
+else:
+    st.warning("Aggiungi le colonne 'Sesso' e 'Età' per visualizzare la Tabella 1.")
+
 
     st.dataframe(table1)
 else:
