@@ -37,10 +37,11 @@ if file:
 
         # Assegna linea in base a cambi categoria
         df = df.sort_values([id_col, date_col])
-        df["Linea"] = df.groupby(id_col)[cat_col].apply(
-            lambda x: (x != x.shift()).cumsum()
-        )
-        df["Linea"] = df["Linea"].astype(str)
+df["linea"] = (
+    df.groupby(id_col)[cat_col]
+    .transform(lambda x: x.ne(x.shift()).cumsum())
+)
+df["linea"] = df["linea"].astype(str)
 
         # Etichetta: Categoria (Linea n)
         df["Terapia"] = df[cat_col] + " (Linea " + df["Linea"] + ")"
