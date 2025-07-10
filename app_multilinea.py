@@ -22,7 +22,7 @@ if file:
             cutoff_date = st.date_input("Data indice (cut-off naïve)")
             followup_cutoff = st.date_input("Data cut-off follow-up", value=pd.to_datetime("2024-09-30"))
             ex_col = st.selectbox("Colonna per il sesso", options=df.columns)
-             age_col = st.selectbox("Colonna per l'età", options=df.columns)
+            age_col = st.selectbox("Colonna per l'età", options=df.columns)
 
         submit = st.form_submit_button("Procedi")
 
