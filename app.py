@@ -27,7 +27,7 @@ if file:
         submit = st.form_submit_button("Procedi")
 
     if submit:
-        df[date_col] = pd.to_datetime(df[date_col])
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce', dayfirst=True)
         # Pazienti naïve
         first_disp = df.groupby(id_col)[date_col].min().reset_index()
         naive_ids = first_disp[first_disp[date_col] >= pd.to_datetime(cutoff_date)][id_col]
