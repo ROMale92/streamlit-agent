@@ -3,16 +3,16 @@
         df = df.dropna(subset=[date_col])
 
         # Selezione colonne per sesso ed età
-        st.markdown("### Tabella 1 - Caratteristiche pazienti")
+        st.markdown ("### Tabella 1 - Caratteristiche pazienti")
         with st.expander("Seleziona colonne per Tabella 1"):
             col1, col2 = st.columns(2)
             with col1:
                 sex_col = st.selectbox("Colonna per il sesso", options=df.columns)
             with col2:
-                age_col = st.selectbox("Colonna per l'età", options=df.columns)
+                age_col = st.selectbox ("Colonna per l'età", options=df.columns)
 
         # Filtro pazienti naïve
-        first_disp = df.groupby(id_col)[date_col].min().reset_index()
+        first_disp = df.groupby(id_col)[date_col].min().reset_index ()
         naive_ids = first_disp[first_disp[date_col] >= pd.to_datetime(cutoff_date)][id_col]
         df = df[df[id_col].isin(naive_ids)]
 
