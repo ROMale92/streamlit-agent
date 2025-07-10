@@ -26,6 +26,29 @@ if file:
         submit = st.form_submit_button("Procedi")
 
     if submit:
+        # Selezione manuale colonne per Tabella 1
+st.markdown("### Tabella 1 - Caratteristiche pazienti")
+
+with st.expander("Seleziona colonne per Tabella 1"):
+    col1, col2 = st.columns(2)
+    with col1:
+        sex_col = st.selectbox("Colonna per il sesso", options=df.columns, index=0)
+    with col2:
+        age_col = st.selectbox("Colonna per l'età", options=df.columns, index=1)
+
+if sex_col in df.columns and age_col in df.columns:
+    table1 = df.groupby("Terapia").agg(
+        Numero_pazienti=(id_col, "nunique"),
+        Percentuale_maschi=(sex_col, lambda x: round((x == "M").mean() * 100, 2)),
+        Età_mediana=(age_col, "median"),
+        Età_minima=(age_col, "min"),
+        Età_massima=(age_col, "max")
+    ).reset_index()
+
+    st.dataframe(table1)
+else:
+    st.info("Aggiungi le colonne 'Sesso' e 'Età' per visualizzare la Tabella 1.")
+
         df[date_col] = pd.to_datetime(df[date_col], errors='coerce', dayfirst=True)
         df = df.dropna(subset=[date_col])
         first_disp = df.groupby(id_col)[date_col].min().reset_index()
