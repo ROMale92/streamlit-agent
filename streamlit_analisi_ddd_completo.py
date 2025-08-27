@@ -8,7 +8,7 @@ st.set_page_config(layout="wide")
 st.title("Analisi prescrittiva farmaci – PDC con DDD")
 
 file = st.file_uploader("① Carica file Excel con dispensazioni singole", type=["xlsx"])
-ddd_file = st.file_uploader("② Carica file con DDD (es. atc_diabe_con_ddd.xlsx)", type=["xlsx"])
+ddd_file = st.file_uploader("② Carica file con DDD (es. ddd_full_who_diabete.xlsx)", type=["xlsx"])
 
 if file and ddd_file:
     df = pd.read_excel(file)
@@ -61,22 +61,30 @@ if file and ddd_file:
         # Sankey
         st.subheader("Flussi terapeutici (Sankey)")
         sankey_data = []
-        max_line = df["Linea"].astype(int).max()
-        for i in range(1, max_line):
-            step = df[df["Linea"].isin([str(i), str(i + 1)])]
-            piv = step.pivot_table(index=id_col, columns="Linea", values="Terapia", aggfunc="first").dropna()
-            if not piv.empty:
-                sankey_data.append(piv.groupby([str(i), str(i + 1)]).size().reset_index(name="Count"))
-        if sankey_data:
-            sankey_df = pd.concat(sankey_data)
-            labels = pd.concat([sankey_df.iloc[:, 0], sankey_df.iloc[:, 1]]).unique().tolist()
-            sankey_df["source"] = sankey_df[sankey_df.columns[0]].apply(labels.index)
-            sankey_df["target"] = sankey_df[sankey_df.columns[1]].apply(labels.index)
-            fig_sankey = go.Figure(go.Sankey(
-                node=dict(label=labels, pad=15, thickness=20),
-                link=dict(source=sankey_df["source"], target=sankey_df["target"], value=sankey_df["Count"])
-            ))
-            st.plotly_chart(fig_sankey, use_container_width=True)
+        try:
+            max_line = int(df["Linea"].astype(float).max())
+            if max_line > 1:
+                for i in range(1, max_line):
+                    step = df[df["Linea"].isin([str(i), str(i + 1)])]
+                    piv = step.pivot_table(index=id_col, columns="Linea", values="Terapia", aggfunc="first").dropna()
+                    if not piv.empty:
+                        sankey_data.append(piv.groupby([str(i), str(i + 1)]).size().reset_index(name="Count"))
+                if sankey_data:
+                    sankey_df = pd.concat(sankey_data)
+                    labels = pd.concat([sankey_df.iloc[:, 0], sankey_df.iloc[:, 1]]).unique().tolist()
+                    sankey_df["source"] = sankey_df[sankey_df.columns[0]].apply(labels.index)
+                    sankey_df["target"] = sankey_df[sankey_df.columns[1]].apply(labels.index)
+                    fig_sankey = go.Figure(go.Sankey(
+                        node=dict(label=labels, pad=15, thickness=20),
+                        link=dict(source=sankey_df["source"], target=sankey_df["target"], value=sankey_df["Count"])
+                    ))
+                    st.plotly_chart(fig_sankey, use_container_width=True)
+                else:
+                    st.info("Nessun flusso sufficiente per costruire il Sankey.")
+            else:
+                st.info("Non ci sono abbastanza linee per costruire un Sankey.")
+        except Exception as e:
+            st.error(f"Errore nella costruzione del Sankey: {e}")
 
         # Selezione linee
         st.subheader("Analisi per linea terapeutica")
