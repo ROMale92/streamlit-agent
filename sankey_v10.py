@@ -5,6 +5,7 @@ import plotly.express as px
 import numpy as np
 import io
 import re
+from datetime import date
 
 st.set_page_config(layout="wide")
 st.title("Sankey — Linee terapeutiche (senza aggregazioni)")
@@ -55,37 +56,71 @@ with st.expander("Anteprima"):
     st.dataframe(df.head())
 
 with st.form("setup"):
+    # scelte colonne
     c1, c2 = st.columns(2)
     with c1:
         id_col  = st.selectbox("Colonna ID paziente", df.columns)
         cat_col = st.selectbox("Colonna categoria/terapia", df.columns)
     with c2:
-        date_col = st.selectbox("Colonna data", df.columns)
-        tmp = _safe_dt(df[date_col]).dropna()
-        default_naive = (tmp.min().date() if not tmp.empty else pd.Timestamp("2000-01-01").date())
-        cutoff_naive = st.date_input("📅 NAÏVE da questa data", value=default_naive)
-        cutoff_fu    = st.date_input("📅 Cut-off follow-up (stato finale)", value=pd.Timestamp.today().date())
+        date_col = st.selectbox("Colonna data erogazione", df.columns)
 
-    c3, c4, c5 = st.columns(3)
+    # range dinamico per il calendario (in base alla colonna data scelta)
+    tmp_dates = _safe_dt(df[date_col]).dropna()
+    if not tmp_dates.empty:
+        MIN_CAL = (tmp_dates.min() - pd.Timedelta(days=3650)).date()  # 10 anni prima del minimo
+        MAX_CAL = (tmp_dates.max() + pd.Timedelta(days=3650)).date()  # 10 anni dopo il massimo
+        default_naive = tmp_dates.min().date()
+        default_fu    = tmp_dates.max().date()
+    else:
+        MIN_CAL = date(1900, 1, 1)
+        MAX_CAL = date(2200, 12, 31)
+        default_naive = date(2000, 1, 1)
+        default_fu    = date.today()
+
+    # clamp dei default nel range
+    default_naive = max(MIN_CAL, min(MAX_CAL, default_naive))
+    default_fu    = max(MIN_CAL, min(MAX_CAL, default_fu))
+
+    # date input con min/max espliciti (formato chiaro)
+    c3, c4 = st.columns(2)
     with c3:
-        collapse = st.checkbox("Collassa ripetizioni consecutive", value=True)
+        cutoff_naive = st.date_input(
+            "📅 NAÏVE da questa data",
+            value=default_naive,
+            min_value=MIN_CAL,
+            max_value=MAX_CAL,
+            format="YYYY-MM-DD",
+        )
     with c4:
-        min_flow = st.number_input("Soglia minima flusso (N)", 1, 999, 10, 1)
+        cutoff_fu = st.date_input(
+            "📅 Cut-off follow-up (stato finale)",
+            value=default_fu,
+            min_value=MIN_CAL,
+            max_value=MAX_CAL,
+            format="YYYY-MM-DD",
+        )
+
+    # opzioni grafiche/filtri
+    c5, c6, c7 = st.columns(3)
     with c5:
+        collapse = st.checkbox("Collassa ripetizioni consecutive", value=True)
+    with c6:
+        min_flow = st.number_input("Soglia minima flusso (N)", 1, 999, 10, 1)
+    with c7:
         per_src_min = st.slider("Nascondi link < % della sorgente", 0.0, 20.0, 1.5, 0.5)
 
-    c6, c7, c8 = st.columns(3)
-    with c6:
-        label_min_total = st.number_input("Mostra etichetta se traffico totale ≥", 0, 999, 60, 1)
-    with c7:
-        lbl_max = st.number_input("Lunghezza max etichetta", 10, 60, 28, 1)
+    c8, c9, c10 = st.columns(3)
     with c8:
+        label_min_total = st.number_input("Mostra etichetta se traffico totale ≥", 0, 999, 60, 1)
+    with c9:
+        lbl_max = st.number_input("Lunghezza max etichetta", 10, 60, 28, 1)
+    with c10:
         fig_height = st.number_input("Altezza grafico (px)", 400, 4000, 1300, 50)
 
-    c9, c10 = st.columns(2)
-    with c9:
+    c11, c12 = st.columns(2)
+    with c11:
         font_size = st.slider("Dimensione font", 10, 24, 13, 1)
-    with c10:
+    with c12:
         font_family = st.selectbox(
             "Font",
             ["Inter, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif",
@@ -96,9 +131,7 @@ with st.form("setup"):
             index=0
         )
 
-    c11, _ = st.columns(2)
-    with c11:
-        link_alpha_min = st.slider("Opacità minima link", 0.05, 0.6, 0.15, 0.05)
+    link_alpha_min = st.slider("Opacità minima link", 0.05, 0.6, 0.15, 0.05)
 
     submitted = st.form_submit_button("Avvia")
 
@@ -149,6 +182,7 @@ for i in range(1, max_line):
         f = piv.groupby([i, i+1]).size().reset_index(name="Count")
         f.columns = ["source", "target", "Count"]
         flows.append(f)
+
 # Terapia finale -> Esito
 last_step = df.groupby(id_col).agg({"Linea": "max", "Terapia": "last", "Esito": "last"}).reset_index()
 f_end = last_step.groupby(["Terapia", "Esito"]).size().reset_index(name="Count")
@@ -223,7 +257,7 @@ labels_pretty = [
 # ---------- plot ----------
 fig = go.Figure(go.Sankey(
     arrangement="freeform",
-    textfont=dict(family=font_family, size=int(font_size), color="#555"),  # testo più leggero
+    textfont=dict(family=font_family, size=int(font_size), color="#555"),  # testo più leggero (no “finto grassetto”)
     node=dict(
         label=labels_pretty,
         pad=34, thickness=24,
