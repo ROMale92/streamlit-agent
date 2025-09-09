@@ -153,4 +153,61 @@ sankey_df["source_id"] = sankey_df["source"].map(id_map)
 sankey_df["target_id"] = sankey_df["target"].map(id_map)
 
 tot_src = sankey_df.groupby("source")["Count"].transform("sum")
-sankey_df["Perc_sou_]()_
+sankey_df["Perc_source_%"] = (sankey_df["Count"] / tot_src * 100).round(1)
+
+palette = px.colors.qualitative.Set3 * 20
+node_colors = [palette[i % len(palette)] for i in range(len(all_labels))]
+
+rel = (sankey_df["Count"] / tot_src).fillna(0).clip(0,1)
+alphas = (link_alpha_min + (1.0 - link_alpha_min) * rel).round(3)
+link_colors = [f"rgba(120,120,120,{a})" for a in alphas]
+
+labels_pretty = [_pretty_label(lab, maxlen=int(lbl_max)) for lab in all_labels]
+
+fig = go.Figure(go.Sankey(
+    arrangement="freeform",
+    node=dict(
+        label=labels_pretty,
+        pad=34, thickness=24,
+        color=node_colors,
+        line=dict(color="rgba(0,0,0,0.35)", width=0.5),
+        x=[x_pos[l] for l in all_labels],
+        y=[y_pos[l] for l in all_labels],
+    ),
+    link=dict(
+        source=sankey_df["source_id"],
+        target=sankey_df["target_id"],
+        value=sankey_df["Count"],
+        color=link_colors,
+        customdata=sankey_df["Perc_source_%"],
+        hovertemplate="<b>%{source.label}</b> → <b>%{target.label}</b><br>"
+                      "N = %{value}  ( %{customdata}% della sorgente )<extra></extra>",
+    )
+))
+fig.update_layout(
+    title_text=f"Sankey — Linee terapeutiche (NAÏVE da {pd.to_datetime(cutoff_naive).date()} • FU fino a {pd.to_datetime(cutoff_followup).date()})",
+    font=dict(size=int(font_size)),
+    plot_bgcolor="white",
+    paper_bgcolor="white"
+)
+st.plotly_chart(fig, use_container_width=True)
+
+# ---------- export ----------
+st.subheader("📥 Scarica dati Sankey")
+buffer = io.BytesIO()
+with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+    sankey_df.to_excel(writer, index=False, sheet_name="links")
+    pd.DataFrame({
+        "id": [id_map[l] for l in all_labels],
+        "label_raw": all_labels,
+        "label_shown": labels_pretty,
+        "stage": [stage_map[l] for l in all_labels],
+        "x": [x_pos[l] for l in all_labels],
+        "y": [y_pos[l] for l in all_labels],
+    }).to_excel(writer, index=False, sheet_name="nodes")
+st.download_button(
+    "💾 Scarica dati Sankey (Excel)",
+    data=buffer.getvalue(),
+    file_name="dati_sankey_completi.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
