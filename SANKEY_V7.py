@@ -105,4 +105,52 @@ df["Terapia"] = df[cat_col] + " (Linea " + df["Linea"].astype(int).astype(str) +
 
 # esito
 last_dates = df.groupby(id_col)["___DATE___"].max().reset_index()
-l
+last_dates["Esito"] = last_dates["___DATE___"].apply(
+    lambda x: "In trattamento" if x >= pd.to_datetime(cutoff_followup) else "Perso al follow-up"
+)
+df = df.merge(last_dates[[id_col, "Esito"]], on=id_col, how="left")
+
+max_line = int(df["Linea"].max())
+if max_line < 1:
+    st.warning("Dati insufficienti per il Sankey."); st.stop()
+
+# ---------- flussi ----------
+flows = []
+for i in range(1, max_line):
+    step = df[df["Linea"].isin([i, i+1])]
+    piv = step.pivot_table(index=id_col, columns="Linea", values="Terapia", aggfunc="first").dropna()
+    if not piv.empty:
+        f = piv.groupby([i, i+1]).size().reset_index(name="Count")
+        f.columns = ["source", "target", "Count"]
+        flows.append(f)
+
+last_step = df.groupby(id_col).agg({"Linea":"max","Terapia":"last","Esito":"last"}).reset_index()
+f_end = last_step.groupby(["Terapia","Esito"]).size().reset_index(name="Count")
+f_end.columns = ["source","target","Count"]
+flows.append(f_end)
+
+sankey_df = pd.concat(flows, ignore_index=True)
+sankey_df = sankey_df[sankey_df["Count"] >= int(min_flow)].copy()
+if sankey_df.empty:
+    st.warning("Tutti i flussi sono sotto la soglia selezionata."); st.stop()
+
+# ---------- layout nodi fisso ----------
+all_labels = pd.unique(sankey_df[["source","target"]].values.ravel()).tolist()
+stage_map = {lab: _stage_from_label(lab) for lab in all_labels}
+max_line_stage = max([v for v in stage_map.values() if v < 10_000] or [1])
+
+x_pos = {lab: (1.0 if stage_map[lab]==10_000 else (stage_map[lab]-1)/max(1, max_line_stage-1)) for lab in all_labels}
+y_pos = {}
+for stg in sorted(set(stage_map.values())):
+    labs = [l for l in all_labels if stage_map[l]==stg]
+    n = len(labs)
+    ys = [0.5] if n==1 else np.linspace(0.06, 0.94, n)
+    for l, y in zip(labs, ys):
+        y_pos[l] = float(y)
+
+id_map = {lab:i for i, lab in enumerate(all_labels)}
+sankey_df["source_id"] = sankey_df["source"].map(id_map)
+sankey_df["target_id"] = sankey_df["target"].map(id_map)
+
+tot_src = sankey_df.groupby("source")["Count"].transform("sum")
+sankey_df["Perc_sou_]()_
