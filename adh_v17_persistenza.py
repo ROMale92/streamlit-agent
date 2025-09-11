@@ -234,17 +234,3 @@ if disp_file and ddd_file:
         file_name=f"aderenza_intervalli_{group_by_col}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
-    # ---------------- Note ----------------
-        with st.expander("ℹ️ Note metodologiche"):
-        st.markdown(
-            f"""
-- **Metodo**: *Intervalli pesati su **persistenza reale*** (non sull'intero periodo).
-- **Periodo massimo**: da prima dispensazione del paziente/terapia per **{period_days}** giorni (solo per troncare gli eventi).
-- **Per intervallo**: `coperti_i = min(giorni_coperti, durata_intervallo)`; ultimo intervallo troncato a fine periodo.
-- **Persistenza**: dalla prima dispensazione fino all’**ultimo giorno coperto** (≤ periodo).
-- **Aderenza**: `ADH_anno = (Σ coperti_i) / durata_persistenza` (limitata a [0,1]).
-- **Riepilogo**: Media, DS, N e % ≥ soglia per **{group_by_col}**.
-"""
-        )
-
